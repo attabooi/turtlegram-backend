@@ -153,5 +153,23 @@ def get_article():
     return jsonify({"message": "success", "articles": articles})
     # "articles": articles를 해줘야 articles값을 넘겨준다
 
+
+
+# 변수명 url을 사용해서 app.py 에서 html로 넘어갈떄 article 데이터 전부를 넘겨주는 방법
+
+@app.route("/article/<article_id>", methods=["GET"]) #변수명 url사용하려면 <>안에 변수를 넣어준뒤 GET으로 받기
+# <article_id>에 넣은 값이 밑에 함수로 들어감
+def get_article_detail(article_id): # 받은 변수명을 함수안에 꼭 넣어줘야함
+    print(article_id) # 변수명 url이 그대로 들어옴
+    article = db.article.find_one({"_id": ObjectId(article_id)}) # ObjectId(article_id)를 db에서 검색해서 해당 아이디를 가진 article 전체 데이터를 가져옴.
+    print(article) 
+    article["_id"] = str(article["_id"])
+    
+    
+    return jsonify({"message": "success", "article": article})
+
+
+
+
 if __name__ == '__main__':
     app.run('0.0.0.0', port=5001, debug=True)
