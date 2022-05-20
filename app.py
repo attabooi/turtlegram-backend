@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from functools import wraps
-import hashlib
 import json
+import hashlib
 from bson import ObjectId
 from flask import Flask, abort, jsonify, request, Response
 from flask_cors import CORS
@@ -23,7 +23,7 @@ db = client.turtlegram
 
 def authorize(f):
     @wraps(f)
-    def decorated_function():
+    def decorated_function(*args, **kwargs):  # user를 여러번 쓰기위한 것, *args, **kwargs
         if not 'Authorization' in request.headers:
             abort(401)
         token = request.headers['Authorization']
@@ -32,7 +32,7 @@ def authorize(f):
             user = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
         except:
             abort(401)
-        return f(user)
+        return f(user, *args, **kwargs)
         
     return decorated_function
 
@@ -98,7 +98,7 @@ def login():
         'exp': datetime.utcnow() + timedelta(seconds= 60 * 20)
     }
     
-    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256').decode('utf-8')
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
     print(token)
     
     return jsonify({"message": "success", "token":token})
@@ -112,7 +112,7 @@ def get_user_info(user):
         '_id': ObjectId(user["id"])
     })
 
-    return jsonify({"message": "success", "email": result["email"]})
+    return jsonify({"message": "success", "email": result["email"], "id": user["id"]})
 
 
 @app.route("/article", methods=["POST"])
@@ -139,7 +139,7 @@ def post_article(user):
     return jsonify({"message": "success"})
 
 
-
+# 게시물 불러오기
 @app.route("/article", methods=["GET"])
 def get_article():
     
@@ -147,9 +147,9 @@ def get_article():
     print(articles)
     
     for article in articles:
-        print(article.get("title"))
+    
         article["_id"] = str(article["_id"])
-        print(article["_id"])
+        
     return jsonify({"message": "success", "articles": articles})
     # "articles": articles를 해줘야 articles값을 넘겨준다
 
@@ -162,13 +162,48 @@ def get_article():
 def get_article_detail(article_id): # 받은 변수명을 함수안에 꼭 넣어줘야함
     print(article_id) # 변수명 url이 그대로 들어옴
     article = db.article.find_one({"_id": ObjectId(article_id)}) # ObjectId(article_id)를 db에서 검색해서 해당 아이디를 가진 article 전체 데이터를 가져옴.
-    print(article) 
-    article["_id"] = str(article["_id"])
-    
-    
-    return jsonify({"message": "success", "article": article})
+    if article:
+        article["_id"] = str(article["_id"])
+        return jsonify({"message": "success", "article": article})
+    else:
+        return jsonify({"message": "fail"}), 404 # 게시글이 없다.
 
 
+
+# 게시물 수정하기
+@app.route("/article/<article_id>", methods=["PATCH"])
+@authorize # 회원이여야 수정할 수 있고, 본인이여야한다.
+def patch_article_detail(user, article_id):
+    print(article_id)
+
+    data = json.loads(request.data)
+    
+    title = data.get("title")
+    content = data.get("content")
+
+    article = db.article.update_one({"_id": ObjectId(article_id), "user": user["id"]},  { 
+        "$set": {"title": title, "content": content}}) # 업데이트 되는 내용을 적어주기
+    
+
+    if article.matched_count:
+        return jsonify({"message": "success"})
+    else:
+        return jsonify({"message": "fail"}), 403 # 게시물 작성자가 아니라면 fail이 뜨게됨
+    
+
+# 게시물 지우기
+@app.route("/article/<article_id>", methods=["DELETE"])
+@authorize
+def delete_article_detail(user, article_id):
+
+    article = db.article.delete_one(
+        {"_id": ObjectId(article_id), "user": user["id"]}
+    )
+
+    if article.deleted_count:
+        return jsonify({"message": "success"})
+    else:
+        return jsonify({"message": "fail"}), 403 # 권한이 없었다
 
 
 if __name__ == '__main__':
