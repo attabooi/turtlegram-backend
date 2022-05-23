@@ -3,6 +3,7 @@ from functools import wraps
 import json
 import hashlib
 from bson import ObjectId
+from bson.json_util import dumps, loads
 from flask import Flask, abort, jsonify, request, Response
 from flask_cors import CORS
 import jwt
@@ -162,11 +163,18 @@ def get_article():
 def get_article_detail(article_id): # 받은 변수명을 함수안에 꼭 넣어줘야함
     print(article_id) # 변수명 url이 그대로 들어옴
     article = db.article.find_one({"_id": ObjectId(article_id)}) # ObjectId(article_id)를 db에서 검색해서 해당 아이디를 가진 article 전체 데이터를 가져옴.
+    
+    #댓글기능들을 불러오기
+    comments = list(db.comment.find({"article": article_id}))
     if article:
         article["_id"] = str(article["_id"])
+        article["comments"] = json.loads(dumps(comments))
         return jsonify({"message": "success", "article": article})
     else:
         return jsonify({"message": "fail"}), 404 # 게시글이 없다.
+
+
+
 
 
 
@@ -191,20 +199,62 @@ def patch_article_detail(user, article_id):
         return jsonify({"message": "fail"}), 403 # 게시물 작성자가 아니라면 fail이 뜨게됨
     
 
+
+
+
 # 게시물 지우기
 @app.route("/article/<article_id>", methods=["DELETE"])
 @authorize
 def delete_article_detail(user, article_id):
 
     article = db.article.delete_one(
-        {"_id": ObjectId(article_id), "user": user["id"]}
-    )
-
+        {"_id": ObjectId(article_id), "user": user["id"]})
+    comment = db.comment.delete_many(
+        {"article": article_id, "user": user["id"]})
     if article.deleted_count:
         return jsonify({"message": "success"})
+
     else:
         return jsonify({"message": "fail"}), 403 # 권한이 없었다
 
 
+
+
+
+
+
+
+@app.route("/article/<article_id>/comment", methods=["POST"])
+@authorize
+def post_comment(user, article_id):
+    data = json.loads(request.data)
+    print(data)
+
+    db_user = db.users.find_one({'_id':ObjectId(user.get('id'))})
+
+    now = datetime.now().strftime("%H:%M:%S")
+    doc = {
+        'article': article_id,
+        'content': data.get('content', None),
+        'user': user['id'],
+        'user_email': db_user['email'],
+        'time': now
+    }
+    print(doc)
+
+    db.comment.insert_one(doc)
+
+    return jsonify({"message": "success"}    )
+
+
+
+
+
+
+@app.route("/article/<article_id>/comment", methods=["GET"])
+def get_comment(article_id):
+    comments = list(db.comment.find({"article": article_id}))
+    json_comments = json.loads(dumps(comments))
+    return jsonify({"message": "success", "comments": json_comments})
 if __name__ == '__main__':
     app.run('0.0.0.0', port=5001, debug=True)
