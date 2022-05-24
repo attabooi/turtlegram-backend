@@ -166,9 +166,13 @@ def get_article_detail(article_id): # 받은 변수명을 함수안에 꼭 넣�
     
     #댓글기능들을 불러오기
     comments = list(db.comment.find({"article": article_id}))
+
+    #좋아요 카운트 불러오기
+    likes = list(db.likes.find({"article": article_id}))
     if article:
         article["_id"] = str(article["_id"])
         article["comments"] = json.loads(dumps(comments))
+        article["likes_count"] = len(likes)
         return jsonify({"message": "success", "article": article})
     else:
         return jsonify({"message": "fail"}), 404 # 게시글이 없다.
@@ -247,10 +251,54 @@ def post_comment(user, article_id):
     return jsonify({"message": "success"}    )
 
 
+# 좋아요 버튼
+@app.route("/article/<article_id>/like", methods=["POST"])
+@authorize
+def post_like(user, article_id):
+    
+    db_user = db.users.find_one({'_id':ObjectId(user.get('id'))})
+
+    now = datetime.now().strftime("%H:%M:%S")
+    doc = {
+    'article': article_id,
+    'user': user['id'],
+    'user_email': db_user['email'],
+    'time': now
+    }
+    
+    db.likes.insert_one(doc)
+
+    return jsonify({"message":"success"})
+
+
+# 좋아요 삭제하기
+@app.route("/article/<article_id>/like", methods=["DELETE"])
+@authorize
+def delete_like(user, article_id):
+    print(user, article_id)
+
+    result = db.likes.delete_one({"article": article_id, "user": user['id']})
+    if result.deleted_count:
+        return jsonify({"message": "success"})
+    else:
+        return jsonify({"message": "fail"}), 400
+
+
+# 좋아요 여부 가져오기
+@app.route("/article/<article_id>/like", methods=["GET"])
+@authorize
+def get_like(user, article_id):
+
+    result = db.likes.find_one({"article": article_id, "user": user['id']})
+    if result:
+        return jsonify({"message": "success", "liked": True})
+    else:
+        return jsonify({"message": "fail", "liked": False})
 
 
 
 
+# 댓글 가져오기
 @app.route("/article/<article_id>/comment", methods=["GET"])
 def get_comment(article_id):
     comments = list(db.comment.find({"article": article_id}))
